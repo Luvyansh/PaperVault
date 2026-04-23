@@ -1,0 +1,130 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.1
+  environment:
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://papervault:papervault@postgres/papervault
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://papervault:papervault@postgres/papervault
+    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/1
+    AIRFLOW__CORE__FERNET_KEY: 'rUCuhbr6VKYQ0P49mFDnbZ23sz94lnSXSZXDyX8lhkA='
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    PYTHONPATH: /opt/airflow/backend
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./backend:/opt/airflow/backend
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: papervault
+      POSTGRES_PASSWORD: papervault
+      POSTGRES_DB: papervault
+      # Reverting to default secure behavior, trust is no longer needed
+    ports:
+      - "5433:5432" # Changed from 5432:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "papervault"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    # 1. CHANGED --concurrency=1 to --pool=solo
+    command: celery -A app.services.celery_app worker -Q celery,ingestion,analytics --loglevel=info --pool=solo
+    environment:
+      DATABASE_URL: postgresql://papervault:papervault@postgres:5432/papervault
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: papers
+      # 2. ADDED THIS LINE to prevent PyTorch from greedily grabbing CPU threads
+      OMP_NUM_THREADS: "1" 
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: celery -A app.services.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    env_file: .env
+    depends_on:
+      - redis
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8081:8080" # <-- CHANGED THIS LINE
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "airflow db migrate &&
+               airflow users create --username admin --password admin
+               --firstname Admin --lastname User
+               --role Admin --email admin@papervault.ai"
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  airflow-logs:
