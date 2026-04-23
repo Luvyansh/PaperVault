@@ -36,5 +36,7 @@ jobs:
             - name: Validate Docker Infrastructure
               # This proves your infrastructure as code is stable
               run: |
+                  # Dynamically create the .env file from the example template for the runner
+                  cp .env.example .env
                   docker compose config
                   docker compose build
