@@ -11,16 +11,18 @@ from app.nlp.ner import NERProcessor
 from app.nlp.embedder import Embedder
 from app.config.settings import get_settings
 
+# --- NEW: Import the ML Service we just built ---
+from app.services.ml_services import ml_classifier
+
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ---------------------------------------------------------
-# GLOBAL ML INITIALIZATION
-# Removed the heavy DistilBART summarizer to prevent CPU lockup
-# ---------------------------------------------------------
 logger.info("Initializing NLP models for Celery worker...")
 ner_processor = NERProcessor()
 embedder = Embedder()
+
+# Initialize ML Models in the Celery Worker memory
+ml_classifier.load_models()
 
 # Initialize Qdrant Vector DB
 qdrant = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
@@ -30,9 +32,9 @@ except Exception:
     logger.info(f"Creating Qdrant collection: {settings.qdrant_collection}")
     qdrant.create_collection(
         collection_name=settings.qdrant_collection,
-        vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+        # --- FIX: Upgraded to 768 dimensions for MPNet ---
+        vectors_config=VectorParams(size=768, distance=Distance.COSINE),
     )
-
 
 @celery_app.task(
     name="app.etl.tasks.ingest_paper",
@@ -50,7 +52,6 @@ def ingest_paper(self, paper_dict: dict) -> dict:
     try:
         exists = db.query(Paper).filter(Paper.arxiv_id == arxiv_id).first()
         if exists:
-            logger.info(f"Paper {arxiv_id} already exists. Skipping.")
             return {"status": "skipped", "arxiv_id": arxiv_id}
 
         pub_date = paper_dict.get("published_at")
@@ -58,11 +59,19 @@ def ingest_paper(self, paper_dict: dict) -> dict:
             pub_date = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
 
         abstract = paper_dict.get("abstract", "")
+        actual_category = paper_dict.get("category")
         
-        # 2. Transform (NLP Pipeline - Streamlined)
+        # --- NEW: Run the paper through the Stacking Ensemble! ---
+        ml_prediction = {"predicted_category": None, "confidence": None}
+        if ml_classifier.is_ready:
+            try:
+                ml_prediction = ml_classifier.predict_category(abstract)
+                logger.info(f"ML Prediction: {ml_prediction['predicted_category']} (Actual: {actual_category})")
+            except Exception as e:
+                logger.error(f"ML Classification failed for {arxiv_id}: {e}")
+
+        # Vector embedding (768-d)
         entities_data = ner_processor.extract_entities(abstract)
-        
-        # BYPASS: We use the abstract itself as the summary for embedding
         summary = abstract 
         vector = embedder.generate_embedding(summary)
 
@@ -73,7 +82,7 @@ def ingest_paper(self, paper_dict: dict) -> dict:
             abstract=abstract,
             summary=summary,
             authors=paper_dict.get("authors"),
-            category=paper_dict.get("category"),
+            category=actual_category, # Store the actual ArXiv category
             pdf_url=paper_dict.get("pdf_url"),
             arxiv_url=paper_dict.get("arxiv_url"),
             published_at=pub_date,
@@ -100,22 +109,23 @@ def ingest_paper(self, paper_dict: dict) -> dict:
                         "arxiv_id": new_paper.arxiv_id,
                         "title": new_paper.title,
                         "category": new_paper.category,
+                        # --- NEW: Save ML predictions to Qdrant so the frontend/PowerBI can see them ---
+                        "ml_predicted_category": ml_prediction.get("predicted_category"),
+                        "ml_confidence": ml_prediction.get("confidence"),
                         "published_at": new_paper.published_at.isoformat(),
                         "abstract": new_paper.abstract,
-                        "authors": new_paper.authors,       # <-- Added Author extraction
-                        "arxiv_url": new_paper.arxiv_url    # <-- Added URL extraction
+                        "authors": new_paper.authors, 
+                        "arxiv_url": new_paper.arxiv_url 
                     }
                 )
             ]
         )
 
         db.commit()
-        logger.info(f"Successfully ingested {arxiv_id}")
         return {"status": "success", "arxiv_id": arxiv_id, "db_id": new_paper.id}
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Failed to ingest {arxiv_id}: {str(e)}")
         raise self.retry(exc=e)
     finally:
         db.close()

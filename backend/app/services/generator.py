@@ -16,8 +16,11 @@ class RAGGenerator:
     def __init__(self):
         logger.info("Initializing Ollama (Gemma 2B) and LangGraph...")
         
-        # Connect to your local Ollama instance
-        self.llm = ChatOllama(model="gemma:2b", temperature=0.2)
+        # Connect to your local Ollama instance using Gemma 2B
+        self.llm = ChatOllama(
+            model="gemma:2b", 
+            temperature=0.2  # Low temperature for factual grounding
+        )
         
         # 2. Build the LangGraph Workflow
         workflow = StateGraph(GraphState)
@@ -37,11 +40,13 @@ class RAGGenerator:
         query = state["query"]
         context = state["context"]
         
+        # Strict RAG system prompt to enforce faithfulness to the retrieved text
         system_instruction = (
             "You are PaperVault, an expert AI research assistant. "
-            "Read the retrieved context below carefully. Provide a highly detailed, descriptive, and technical summary answering the user's query. "
+            "You MUST answer the user's question based ONLY on the provided context below. "
+            "If the answer is not contained in the context, explicitly state that you do not have enough information. "
             "Structure your response beautifully using Markdown headings, bullet points, and deep analysis. "
-            "You MUST include inline markdown hyperlinks to the papers using the provided URLs. Do not just give 3 points; provide an in-depth synthesis.\n\n"
+            "You MUST include inline markdown hyperlinks to the papers using the provided URLs.\n\n"
             f"CONTEXT:\n{context}"
         )
         
@@ -62,10 +67,12 @@ class RAGGenerator:
         # Format the papers into a single context string
         context_str = ""
         for idx, paper in enumerate(retrieved_papers):
-            # Ensure we are extracting the title, abstract, and URL safely
             title = paper.get("title", "Unknown Title")
-            abstract = paper.get("abstract", "Abstract not available.")
+            raw_abstract = paper.get("abstract", "Abstract not available.")
             url = paper.get("arxiv_url", "URL not available") 
+            
+            # Truncate abstract to 500 characters to prevent context window overflow
+            abstract = raw_abstract[:500] + ("..." if len(raw_abstract) > 500 else "")
             
             # Inject the URL into the LLM's reading context
             context_str += f"--- Paper {idx+1}: {title} ---\nURL: {url}\nAbstract: {abstract}\n\n"
@@ -73,7 +80,7 @@ class RAGGenerator:
         # Initialize the state and run the graph
         initial_state = {"query": query, "context": context_str}
         
-        logger.info("Triggering LangGraph generation node...")
+        logger.info("Triggering LangGraph generation node with Gemma 2B...")
         result = self.app.invoke(initial_state)
         
         return result["generation"]

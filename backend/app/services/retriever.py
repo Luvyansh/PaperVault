@@ -1,6 +1,10 @@
+import logging
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 from app.nlp.embedder import Embedder
 from app.config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 class PaperRetriever:
     """
@@ -10,24 +14,33 @@ class PaperRetriever:
         self.settings = get_settings()
         self.qdrant = QdrantClient(url=self.settings.qdrant_url, api_key=self.settings.qdrant_api_key)
         self.embedder = Embedder()
+        self.similarity_threshold = 0.35 # Based on your Kaggle EDA findings
 
     def search(self, query: str, limit: int = 5) -> list[dict]:
-        # 1. Convert the user's question into a 384-dimensional vector
+        # 1. Convert the user's question into a vector (Ensure Embedder uses 768-d MPNet!)
         query_vector = self.embedder.generate_embedding(query)
 
-        # 2. Search Qdrant for the closest matching vectors
-        search_results = self.qdrant.search(
-            collection_name=self.settings.qdrant_collection,
-            query_vector=query_vector,
-            limit=limit,
-            with_payload=True 
-        )
+        # 2. Search Qdrant with Error Handling
+        try:
+            search_results = self.qdrant.search(
+                collection_name=self.settings.qdrant_collection,
+                query_vector=query_vector,
+                limit=limit,
+                with_payload=True 
+            )
+        except UnexpectedResponse as e:
+            logger.error(f"Qdrant DB Error: {str(e)}")
+            return [] # Return empty list gracefully if DB fails
 
-        # 3. Format the results into a clean list of dictionaries
+        # 3. Format results AND apply the similarity threshold
         formatted_results = []
-        for result in search_results: # <-- Here is your loop!
+        for result in search_results:
             
-            # Fallback URL generator in case it isn't in the database
+            # Skip papers that are mathematically irrelevant to the query
+            if result.score < self.similarity_threshold:
+                logger.warning(f"Discarded paper '{result.payload.get('arxiv_id')}' (Score {result.score:.2f} below threshold)")
+                continue
+                
             fallback_url = f"https://arxiv.org/abs/{result.payload.get('arxiv_id')}"
             
             formatted_results.append({
@@ -38,7 +51,6 @@ class PaperRetriever:
                 "category": result.payload.get("category"),
                 "published_at": result.payload.get("published_at"),
                 "abstract": result.payload.get("abstract", ""),
-                # --- NEW FIELDS FOR THE FRONTEND MODAL ---
                 "authors": result.payload.get("authors", "Unknown Author"), 
                 "arxiv_url": result.payload.get("arxiv_url", fallback_url) 
             })
