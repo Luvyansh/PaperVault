@@ -340,3 +340,101 @@ cd frontend
 npm run dev
 
 ```
+
+
+
+## 9. End-to-End Workflow Architecture Diagram
+
+Paste this anywhere in your README. It shows the complete flow of data from ArXiv all the way to the React UI and Power BI dashboard.
+
+```mermaid
+flowchart TD
+    %% Define Styles
+    classDef external fill:#f9f9f9,stroke:#333,stroke-width:2px,color:#333;
+    classDef orchestration fill:#e1bee7,stroke:#8e24aa,stroke-width:2px,color:#000;
+    classDef worker fill:#ffcc80,stroke:#ef6c00,stroke-width:2px,color:#000;
+    classDef db fill:#90caf9,stroke:#1565c0,stroke-width:2px,color:#000;
+    classDef backend fill:#a5d6a7,stroke:#2e7d32,stroke-width:2px,color:#000;
+    classDef llm fill:#ef9a9a,stroke:#c62828,stroke-width:2px,color:#000;
+    classDef frontend fill:#ffe082,stroke:#f39c12,stroke-width:2px,color:#000;
+
+    %% Nodes
+    ArXiv["🌐 ArXiv API (XML)"]:::external
+    Airflow["⏱️ Apache Airflow\n(Scheduler / Dispatcher)"]:::orchestration
+    Redis["📥 Redis\n(Message Broker)"]:::db
+    Celery["⚙️ Celery Workers\n(ETL & ML Processing)"]:::worker
+    
+    subgraph Local_ML_Pipeline ["Local ML Pipeline (CPU)"]
+        Ensemble["Stacking Ensemble\n(Topic Classification)"]:::worker
+        Embedder["MPNet Embedder\n(768-d Vectors)"]:::worker
+    end
+
+    PG["🐘 PostgreSQL\n(Relational Metadata)"]:::db
+    Qdrant["🎯 Qdrant\n(Vector Database)"]:::db
+    
+    FastAPI["⚡ FastAPI Backend\n(REST API)"]:::backend
+    LangGraph["🧠 LangGraph RAG\n(Retrieval & Synthesis)"]:::backend
+    Ollama["🤖 Ollama\n(Gemma 2B - 4bit)"]:::llm
+    
+    React["💻 React Frontend\n(Interactive UI)"]:::frontend
+    PowerBI["📊 Power BI\n(Live Analytics)"]:::frontend
+
+    %% Connections
+    ArXiv -->|Daily Fetch| Airflow
+    Airflow -->|Creates Job Tickets| Redis
+    Redis -->|Consumes Tickets| Celery
+    Celery --> Local_ML_Pipeline
+    Local_ML_Pipeline -->|Saves Metadata| PG
+    Local_ML_Pipeline -->|Saves Vectors| Qdrant
+    
+    React -->|User Query| FastAPI
+    FastAPI -->|Semantic Search| Qdrant
+    Qdrant -->|Retrieved Papers| LangGraph
+    LangGraph -->|Strict System Prompt| Ollama
+    Ollama -->|Synthesized Output| LangGraph
+    LangGraph -->|JSON Response| React
+    
+    PG -->|DirectQuery Views| PowerBI
+
+```
+
+## 10. Airflow DAG Architecture
+
+This diagram visualizes the specific task mapping and dependencies inside your Airflow orchestration layer.
+
+```mermaid
+flowchart LR
+    %% Styles
+    classDef dag fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000;
+    classDef task fill:#ffffff,stroke:#1976d2,stroke-width:1px,color:#000;
+    classDef dynamic fill:#fff3e0,stroke:#f57c00,stroke-width:1px,stroke-dasharray: 5 5,color:#000;
+
+    subgraph DAG ["daily_arxiv_ingestion"]
+        direction LR
+        Start(("Start")):::dag
+        
+        Fetch["fetch_daily_papers\n(API Call & XML Parsing)"]:::task
+        
+        subgraph CeleryQueue ["Distributed Celery Tasks"]
+            direction TB
+            Ingest1["ingest_paper (Paper 1)"]:::dynamic
+            Ingest2["ingest_paper (Paper 2)"]:::dynamic
+            IngestN["ingest_paper (Paper N)"]:::dynamic
+        end
+        
+        Refresh["refresh_topics\n(Update Analytics)"]:::task
+        End(("End")):::dag
+        
+        Start --> Fetch
+        Fetch -->|Queues Payload| Ingest1
+        Fetch -->|Queues Payload| Ingest2
+        Fetch -->|Queues Payload| IngestN
+        
+        Ingest1 --> Refresh
+        Ingest2 --> Refresh
+        IngestN --> Refresh
+        
+        Refresh --> End
+    end
+
+```
