@@ -55,9 +55,10 @@ PaperVault is built on a modern, decoupled tech stack designed for resilience, s
 
 ## 4. Power BI: Enterprise Analytics & Intelligence
 
-*Space reserved for Power BI Dashboard Demo GIF*
+*Power BI Dashboard GIF*
 
-**[ Insert `powerbi_demo.gif` Here ]**
+![Demo GIF](demos/bi-report.gif)
+
 
 The analytical layer of PaperVault is built to provide immediate executive intelligence. Because the dashboard connects to the live PostgreSQL database via **DirectQuery**, no manual data imports or complex DAX scheduling are required. The moment Airflow ingests a new batch of papers, a simple dashboard refresh updates the entire canvas.
 
@@ -72,11 +73,17 @@ The analytical layer of PaperVault is built to provide immediate executive intel
 
 ## 5. User Interface (Frontend)
 
-*Space reserved for React Frontend Demo GIF / Screenshots*
+*React Frontend Demo GIF / Screenshots*
 
-**[ Insert `frontend_rag_demo.gif` Here ]**
+![Dark Mode](demos/Frontend-Dark-Long.png) 
 
-**[ Insert `paper_modal_screenshot.png` Here ]**
+![Dark Mode - Zoom](demos/Frontend-Detailed.png) 
+
+![Dark Mode - Sources](demos/Frontend-Dark-Close.png)
+
+![Light Mode](demos/Frontend-Light.png)
+
+![System Usage](demos/System-Usage.png)
 
 The frontend is a dedicated React SPA designed to surface the complex backend RAG architecture seamlessly. It features a custom skeleton loader, dynamic confidence badges reflecting the ML pipeline's predictions, and an interactive layout that prevents context switching by handling document reading directly within the app.
 
