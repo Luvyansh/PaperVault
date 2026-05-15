@@ -1,447 +1,576 @@
-# PaperVault: Enterprise Research Intelligence Platform
+# PaperVault
 
-**Author:** Anurag Pandey
-**Project Type:** Full-Stack AI Capstone / Professional Technical Portfolio
+![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
 
----
+**Local-first research intelligence for arXiv** — ingest papers on a schedule, classify them with a CPU ML ensemble, index them for semantic search, and answer questions with a grounded RAG pipeline (FastAPI + Qdrant + Ollama).
 
-## 1. Project Intuition & Vision
+| | |
+|---|---|
+| **Author** | Anurag Pandey |
+| **Stack** | Python 3.11 · FastAPI · Celery · Airflow · PostgreSQL · Qdrant · React · Ollama |
+| **Design goal** | End-to-end ML/RAG on modest hardware (~4GB VRAM for the LLM) |
 
-Staying current with the relentless flood of daily academic research on arXiv is mathematically impossible for a single human. The intuition behind **PaperVault** was to build an automated "Research Intelligence" platform capable of ingesting, classifying, and synthesizing massive volumes of scientific literature daily.
-
-However, the true engineering challenge was architectural: How do we build a State-of-the-Art (SOTA), end-to-end Machine Learning and Retrieval-Augmented Generation (RAG) pipeline that can run **entirely locally on low-end hardware (e.g., a strict 4GB VRAM constraint)** while maintaining enterprise-grade accuracy?
-
-PaperVault is the solution. It is a fully containerized, microservice-driven application that orchestrates automated ETL pipelines, local ML ensembles, dense vector embeddings, and a strict, anti-hallucination LangGraph RAG workflow powered by quantized edge models.
-
----
-
-## 2. Research & Pre-Computation Pipeline
-
-Before writing a single line of backend API code, the foundation of PaperVault was forged in Kaggle/Colab notebooks. The goal was to establish a rigorous, highly optimized pipeline that could be exported and deployed locally.
-
-* **Exploratory Data Analysis (EDA):** Scraped an initial corpus of ~2,000 multi-domain research papers across 8 distinct categories (Physics, Math, Quant Finance, Quant Biology, CS, etc.). Analyzed class balances, abstract lengths, and null values.
-* **Machine Learning Ensemble:** Trained and serialized a highly accurate (90%+) Stacking Ensemble classifier alongside a Label Encoder and TF-IDF Vectorizer. This ensemble classifies incoming papers in milliseconds on the CPU, removing the need for heavy LLM inference during ingestion.
-* **Vectorization Upgrade:** Benchmarked embedding models and deliberately upgraded to the 768-dimension `all-mpnet-base-v2` model. It provided superior semantic clustering for scientific text while remaining small enough to run natively on local CPUs without locking up system resources.
-* **Model Serialization:** Exported the fully trained pipeline components (`.pkl` files) and initial corpus metadata directly from the notebook to ensure the FastAPI backend could load them instantly into memory via its Lifespan events.
+<p align="center">
+  <img src="demos/Frontend-Dark-Long.png" alt="PaperVault dark theme — search and synthesis view" width="900" />
+</p>
 
 ---
 
-## 3. Technology Stack & Architecture
+## Table of contents
 
-PaperVault is built on a modern, decoupled tech stack designed for resilience, scalability, and local execution.
-
-**Data Engineering & Orchestration**
-
-* **Apache Airflow:** Acts as the "Dispatcher," managing the daily ETL DAG that fetches XML data from the arXiv API, respects rate limits, and queues ingestion tasks.
-* **Celery & Redis:** The "Muscle." Background workers process the queued tasks, run the text through the ML classifier, generate embeddings, and load the databases asynchronously.
-
-**Database Layer (Dual-Architecture)**
-
-* **PostgreSQL:** Relational storage for paper metadata, extracted NLP entities, and Power BI analytical views.
-* **Qdrant:** High-performance Vector Database storing the 768-dimensional document embeddings for semantic similarity search.
-
-**Backend & AI Engine**
-
-* **Python 3.11 & FastAPI:** High-performance asynchronous API serving the RAG endpoints and UI data.
-* **LangGraph & LangChain:** Orchestrates the generative RAG workflow.
-* **Ollama (Gemma 2B):** A highly capable frontier edge model running in 4-bit quantization, allowing the generative AI to easily fit within 4GB VRAM. It operates under a strict anti-hallucination system prompt and context-truncation protocol to guarantee factual grounding.
-
-**Frontend & Analytics**
-
-* **React + Vite + Tailwind CSS:** A sleek, SaaS-style user interface utilizing Framer Motion for elegant modal transitions and responsive design.
-* **Power BI:** Live enterprise dashboard tethered to the Postgres database via DirectQuery.
+- [Features](#features)
+- [Architecture](#architecture)
+- [How it works](#how-it-works)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Quick start](#quick-start)
+- [Full setup guide](#full-setup-guide)
+- [Verify the installation](#verify-the-installation)
+- [Service URLs](#service-urls)
+- [Screenshots & demos](#screenshots--demos)
+- [Power BI analytics](#power-bi-analytics)
+- [Project structure](#project-structure)
+- [CI/CD](#cicd)
+- [Troubleshooting](#troubleshooting)
+- [Research & notebooks](#research--notebooks)
 
 ---
 
-## 4. Power BI: Enterprise Analytics & Intelligence
+## Features
 
-*Power BI Dashboard GIF*
-
-![Demo GIF](demos/bi-report.gif)
-
-
-The analytical layer of PaperVault is built to provide immediate executive intelligence. Because the dashboard connects to the live PostgreSQL database via **DirectQuery**, no manual data imports or complex DAX scheduling are required. The moment Airflow ingests a new batch of papers, a simple dashboard refresh updates the entire canvas.
-
-**Dashboard Features:**
-
-* **Executive KPI Banner:** Tracks "Total Papers Synthesized," "Total Entities Extracted," and the dynamic "Extraction Yield" across scientific domains.
-* **Domain Split (Donut Chart):** Visualizes the categorical breakdown of the ingested corpus (e.g., `physics.*`, `math.*`, `q-fin.*`, `q-bio.*`) based on the predictions from the local ML Stacking Ensemble.
-* **Entity Radar (Bar Chart):** Displays the Top 10 extracted technical terms and concepts across the corpus.
-* **Interactive SaaS Filtering:** By clicking directly on a slice (e.g., Physics) in the Domain Share chart, the relational model instantly recalculates the KPI cards and filters the Entity Radar to show only the concepts relevant to that specific domain.
+| Area | What you get |
+|------|----------------|
+| **Ingestion** | Scheduled Airflow DAG → Redis → Celery workers fetch arXiv XML, respect rate limits, dedupe by `arxiv_id` |
+| **ML (CPU)** | TF-IDF + stacking ensemble for domain labels; spaCy NER for entities; `all-mpnet-base-v2` (768-d) embeddings |
+| **Storage** | PostgreSQL for metadata & entities; Qdrant for vector search |
+| **RAG** | LangGraph + Ollama (`gemma4:e2b`) with strict grounding and inline citation links |
+| **UI** | React SPA — semantic search, markdown briefs (KaTeX), citation cards, forest/fantasy themes |
+| **Analytics** | Alembic views for Power BI DirectQuery on Postgres |
 
 ---
 
-## 5. User Interface (Frontend)
+## Architecture
 
-*React Frontend Demo GIF / Screenshots*
-
-![Dark Mode](demos/Frontend-Dark-Long.png) 
-
-![Dark Mode - Zoom](demos/Frontend-Detailed.png) 
-
-![Dark Mode - Sources](demos/Frontend-Dark-Close.png)
-
-![Light Mode](demos/Frontend-Light.png)
-
-![System Usage](demos/System-Usage.png)
-
-The frontend is a dedicated React SPA designed to surface the complex backend RAG architecture seamlessly. It features a custom skeleton loader, dynamic confidence badges reflecting the ML pipeline's predictions, and an interactive layout that prevents context switching by handling document reading directly within the app.
-
----
-
-## 6. Continuous Integration / Continuous Deployment (CI/CD)
-
-The project leverages GitHub Actions to enforce code quality and infrastructure stability automatically on every push to the `main` branch.
-
-```yaml
-name: PaperVault CI/CD
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-jobs:
-  integration-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install Backend Dependencies
-        working-directory: ./backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Check Code Formatting (Ruff / Flake8)
-        working-directory: ./backend
-        run: |
-          pip install flake8
-          flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
-
-      - name: Validate Docker Infrastructure
-        run: |
-          docker compose config
-          docker compose build
-
-```
-
----
-
-## 7. Project Directory Structure
-
-```text
-luvyansh@StunX:/mnt/e/Projects/papervault$ tree -I '.git|node_modules|__pycache__|venv'
-.
-├── Help.md
-├── MAKEFILE
-├── airflow
-│   └── dags
-│       └── arxiv_ingestion_dag.py
-├── backend
-│   ├── Dockerfile.dev
-│   ├── alembic.ini
-│   ├── app
-│   │   ├── __init__.py
-│   │   ├── config
-│   │   │   ├── __init__.py
-│   │   │   └── settings.py
-│   │   ├── db
-│   │   │   ├── __init__.py
-│   │   │   ├── migrations
-│   │   │   │   ├── README
-│   │   │   │   ├── env.py
-│   │   │   │   ├── script.py.mako
-│   │   │   │   └── versions
-│   │   │   │       ├── 1447c589ce26_create_powerbi_analytics_views.py
-│   │   │   │       ├── cd150a31e02f_create_powerbi_analytics_views.py
-│   │   │   │       └── d4177f8edc8f_initial_schema_setup.py
-│   │   │   ├── models.py
-│   │   │   └── session.py
-│   │   ├── etl
-│   │   │   ├── __init__.py
-│   │   │   ├── arxiv_client.py
-│   │   │   ├── tasks.py
-│   │   │   └── validators.py
-│   │   ├── main.py
-│   │   ├── models
-│   │   │   ├── label_encoder.pkl
-│   │   │   ├── stacking_ensemble.pkl
-│   │   │   └── tfidf_vectorizer.pkl
-│   │   ├── nlp
-│   │   │   ├── __init__.py
-│   │   │   ├── embedder.py
-│   │   │   ├── ner.py
-│   │   │   └── summarizer.py
-│   │   ├── services
-│   │   │   ├── __init__.py
-│   │   │   ├── celery_app.py
-│   │   │   ├── generator.py
-│   │   │   ├── ml_services.py
-│   │   │   └── retriever.py
-│   │   └── utils
-│   │       └── __init__.py
-│   ├── fix_qdrant.py
-│   ├── init_db.py
-│   ├── requirements.txt
-│   ├── reset_schema.py
-│   └── tests
-│       ├── __init__.py
-│       └── unit
-│           └── __init__.py
-├── docker-compose.yml
-├── docs
-│   └── adr
-├── frontend
-│   ├── README.md
-│   ├── components.json
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package-lock.json
-│   ├── package.json
-│   ├── postcss.config.js
-│   ├── public
-│   │   ├── favicon.svg
-│   │   └── icons.svg
-│   ├── src
-│   │   ├── App.css
-│   │   ├── App.tsx
-│   │   ├── assets
-│   │   │   ├── hero.png
-│   │   │   ├── react.svg
-│   │   │   └── vite.svg
-│   │   ├── components
-│   │   │   └── animate-ui
-│   │   │       ├── components
-│   │   │       │   └── buttons
-│   │   │       │       └── liquid.tsx
-│   │   │       └── primitives
-│   │   │           ├── animate
-│   │   │           │   └── slot.tsx
-│   │   │           └── buttons
-│   │   │               └── liquid.tsx
-│   │   ├── index.css
-│   │   ├── lib
-│   │   │   ├── get-strict-context.tsx
-│   │   │   └── utils.ts
-│   │   └── main.tsx
-│   ├── tailwind.config.js
-│   ├── tsconfig.app.json
-│   ├── tsconfig.json
-│   ├── tsconfig.node.json
-│   └── vite.config.ts
-└── notebooks
-    ├── Benchmarks.ipynb
-    └── EDA.ipynb
-
-```
-
----
-
-## 8. Setup & Execution Guide
-
-To run PaperVault locally from scratch, execute the following steps in order to provision the virtual environment, spin up the Docker containers, run the database migrations, and launch the UI.
-
-**1. Initialize the Python Environment**
-
-```bash
-python -m venv venv
-
-```
-
-**2. Activate Virtual Environment**
-
-```bash
-cd backend
-# On Windows:
-venv\Scripts\activate
-# On Mac/Linux:
-source venv/bin/activate
-
-```
-
-**3. Install Dependencies**
-
-```bash
-pip install -r requirements.txt
-
-```
-
-**4. Spin up the Docker Infrastructure (Detached)**
-
-```bash
-docker-compose up -d
-
-```
-
-**5. Initialize the Database (Temporary script for first-run tables)**
-
-```bash
-python init_db.py
-
-```
-
-**6. Migrate the Airflow Internal Database**
-
-```bash
-docker-compose run --rm airflow-webserver airflow db migrate
-
-```
-
-**7. Monitor Airflow Webserver Logs**
-
-```bash
-docker-compose logs -f airflow-webserver
-
-```
-
-**8. Monitor Airflow Worker Logs**
-
-```bash
-docker-compose logs -f airflow-worker
-
-```
-
-**9. Monitor Celery Processing Logs (Model Downloads/Ingestion)**
-
-```bash
-docker-compose logs -f celery-worker
-
-```
-
-**10. Reset Partial Schemas (If necessary before Alembic)**
-
-```bash
-python reset_schema.py
-
-```
-
-**11. Execute Alembic Migrations (Builds correct relational structure and Power BI Views)**
-
-```bash
-alembic upgrade head
-
-```
-
-**12. Launch the FastAPI Backend**
-
-```bash
-uvicorn app.main:app --reload
-
-```
-
-**13. Launch the React Frontend**
-
-```bash
-# Open a new terminal window
-cd frontend
-npm run dev
-
-```
-
-
-
-## 9. End-to-End Workflow Architecture Diagram
-
-Paste this anywhere in your README. It shows the complete flow of data from ArXiv all the way to the React UI and Power BI dashboard.
-
-```mermaid
-flowchart TD
-    %% Define Styles
-    classDef external fill:#f9f9f9,stroke:#333,stroke-width:2px,color:#333;
-    classDef orchestration fill:#e1bee7,stroke:#8e24aa,stroke-width:2px,color:#000;
-    classDef worker fill:#ffcc80,stroke:#ef6c00,stroke-width:2px,color:#000;
-    classDef db fill:#90caf9,stroke:#1565c0,stroke-width:2px,color:#000;
-    classDef backend fill:#a5d6a7,stroke:#2e7d32,stroke-width:2px,color:#000;
-    classDef llm fill:#ef9a9a,stroke:#c62828,stroke-width:2px,color:#000;
-    classDef frontend fill:#ffe082,stroke:#f39c12,stroke-width:2px,color:#000;
-
-    %% Nodes
-    ArXiv["🌐 ArXiv API (XML)"]:::external
-    Airflow["⏱️ Apache Airflow\n(Scheduler / Dispatcher)"]:::orchestration
-    Redis["📥 Redis\n(Message Broker)"]:::db
-    Celery["⚙️ Celery Workers\n(ETL & ML Processing)"]:::worker
-    
-    subgraph Local_ML_Pipeline ["Local ML Pipeline (CPU)"]
-        Ensemble["Stacking Ensemble\n(Topic Classification)"]:::worker
-        Embedder["MPNet Embedder\n(768-d Vectors)"]:::worker
-    end
-
-    PG["🐘 PostgreSQL\n(Relational Metadata)"]:::db
-    Qdrant["🎯 Qdrant\n(Vector Database)"]:::db
-    
-    FastAPI["⚡ FastAPI Backend\n(REST API)"]:::backend
-    LangGraph["🧠 LangGraph RAG\n(Retrieval & Synthesis)"]:::backend
-    Ollama["🤖 Ollama\n(Gemma 2B - 4bit)"]:::llm
-    
-    React["💻 React Frontend\n(Interactive UI)"]:::frontend
-    PowerBI["📊 Power BI\n(Live Analytics)"]:::frontend
-
-    %% Connections
-    ArXiv -->|Daily Fetch| Airflow
-    Airflow -->|Creates Job Tickets| Redis
-    Redis -->|Consumes Tickets| Celery
-    Celery --> Local_ML_Pipeline
-    Local_ML_Pipeline -->|Saves Metadata| PG
-    Local_ML_Pipeline -->|Saves Vectors| Qdrant
-    
-    React -->|User Query| FastAPI
-    FastAPI -->|Semantic Search| Qdrant
-    Qdrant -->|Retrieved Papers| LangGraph
-    LangGraph -->|Strict System Prompt| Ollama
-    Ollama -->|Synthesized Output| LangGraph
-    LangGraph -->|JSON Response| React
-    
-    PG -->|DirectQuery Views| PowerBI
-
-```
-
-## 10. Airflow DAG Architecture
-
-This diagram visualizes the specific task mapping and dependencies inside your Airflow orchestration layer.
+High-level data flow from arXiv through ingestion, storage, query, and analytics:
 
 ```mermaid
 flowchart LR
-    %% Styles
-    classDef dag fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000;
-    classDef task fill:#ffffff,stroke:#1976d2,stroke-width:1px,color:#000;
-    classDef dynamic fill:#fff3e0,stroke:#f57c00,stroke-width:1px,stroke-dasharray: 5 5,color:#000;
+    ArXiv[arXiv API] --> Airflow[Airflow DAG]
+    Airflow --> Redis[Redis]
+    Redis --> Celery[Celery workers]
+    Celery --> ML[Classifier + MPNet + spaCy NER]
+    ML --> PG[(PostgreSQL)]
+    ML --> Qdrant[(Qdrant)]
+    UI[React SPA] --> API[FastAPI]
+    API --> Qdrant
+    API --> Ollama[Ollama Gemma]
+    PG --> PowerBI[Power BI]
+```
 
-    subgraph DAG ["daily_arxiv_ingestion"]
-        direction LR
-        Start(("Start")):::dag
-        
-        Fetch["fetch_daily_papers\n(API Call & XML Parsing)"]:::task
-        
-        subgraph CeleryQueue ["Distributed Celery Tasks"]
-            direction TB
-            Ingest1["ingest_paper (Paper 1)"]:::dynamic
-            Ingest2["ingest_paper (Paper 2)"]:::dynamic
-            IngestN["ingest_paper (Paper N)"]:::dynamic
-        end
-        
-        Refresh["refresh_topics\n(Update Analytics)"]:::task
-        End(("End")):::dag
-        
-        Start --> Fetch
-        Fetch -->|Queues Payload| Ingest1
-        Fetch -->|Queues Payload| Ingest2
-        Fetch -->|Queues Payload| IngestN
-        
-        Ingest1 --> Refresh
-        Ingest2 --> Refresh
-        IngestN --> Refresh
-        
-        Refresh --> End
+<details>
+<summary><strong>Legend</strong></summary>
+
+| Component | Role |
+|-----------|------|
+| **Airflow** | Daily scheduler; triggers the Celery ingestion pipeline |
+| **Celery** | Fetches papers, runs ML/NLP, writes to Postgres + Qdrant |
+| **FastAPI** | Serves `/api/rag` and `/api/predict` (runs on the host in dev) |
+| **Ollama** | Local LLM for synthesis (not in Docker — install on host) |
+| **Power BI** | Optional; connects to Postgres analytics views |
+
+</details>
+
+---
+
+## How it works
+
+### 1. Ingestion pipeline
+
+Airflow does not process papers itself — it dispatches work to your **backend Celery** workers:
+
+```mermaid
+flowchart LR
+    subgraph Airflow["Airflow — daily_arxiv_ingestion"]
+        T[trigger_master_pipeline]
     end
 
+    subgraph CeleryBackend["Celery (papervault worker)"]
+        F[fetch_daily_papers]
+        I1[ingest_paper × N]
+        R[refresh_topics]
+    end
+
+    T -->|Redis task| F
+    F --> I1
+    I1 --> R
 ```
+
+Per paper, `ingest_paper`:
+
+1. Skips duplicates in Postgres  
+2. Classifies abstract (stacking ensemble)  
+3. Extracts entities (spaCy)  
+4. Embeds abstract (MPNet → 768-d)  
+5. Upserts Postgres + Qdrant  
+
+### 2. RAG query path
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant R as React UI
+    participant A as FastAPI
+    participant Q as Qdrant
+    participant L as LangGraph
+    participant O as Ollama
+
+    U->>R: Ask a research question
+    R->>A: GET /api/rag?q=...&limit=5
+    A->>Q: Vector search (query embedding)
+    Q-->>A: Top-k papers + metadata
+    A->>L: Build context from abstracts
+    L->>O: gemma4:e2b (grounded prompt)
+    O-->>L: Markdown answer
+    L-->>A: Synthesis + sources
+    A-->>R: JSON response
+    R-->>U: Intelligence brief + citations
+```
+
+### 3. Dual-database layout
+
+```mermaid
+flowchart TB
+    subgraph Relational["PostgreSQL"]
+        P[papers]
+        E[entities]
+        T[topics]
+        V[Power BI views]
+    end
+
+    subgraph Vector["Qdrant — collection: papers"]
+        VEC[768-d cosine vectors + payload]
+    end
+
+    Celery[Celery ingest] --> P
+    Celery --> E
+    Celery --> VEC
+    API[FastAPI RAG] --> VEC
+    API --> P
+    V --> PowerBI[Power BI DirectQuery]
+```
+
+---
+
+## Tech stack
+
+| Layer | Technologies |
+|-------|----------------|
+| Orchestration | Apache Airflow 2.9, Celery, Redis |
+| API | FastAPI, Pydantic, Alembic |
+| ML / NLP | scikit-learn (joblib), sentence-transformers, spaCy |
+| Vector DB | Qdrant 1.9 |
+| RAG | LangChain, LangGraph, Ollama |
+| Frontend | React 19, Vite, Tailwind CSS, DaisyUI, Framer Motion |
+| Infra | Docker Compose, GitHub Actions |
+
+---
+
+## Prerequisites
+
+Install these **before** cloning:
+
+| Tool | Version | Notes |
+|------|---------|--------|
+| [Git](https://git-scm.com/) | latest | Clone the repo |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | latest | Runs Postgres, Redis, Qdrant, Airflow, Celery |
+| [Python](https://www.python.org/) | **3.11** | Host API + Alembic |
+| [Node.js](https://nodejs.org/) | **20+** | Frontend dev server |
+| [Ollama](https://ollama.com/) | latest | Local LLM for RAG |
+
+**Hardware (guidance)**
+
+- **Minimum:** 16 GB RAM, 4 CPU cores, ~10 GB free disk (Docker images + embeddings cache)  
+- **GPU:** Optional. `docker-compose.yml` reserves an NVIDIA GPU for the Celery worker; remove the `deploy.resources` block under `celery-worker` if you do not have one.  
+- **First ingest:** Downloads `all-mpnet-base-v2` and spaCy models — can take several minutes.
+
+---
+
+## Quick start
+
+> **TL;DR** — infrastructure in Docker; API and UI on the host.
+
+```bash
+git clone https://github.com/luvyansh/papervault.git
+cd papervault
+
+cp .env.example .env
+
+docker compose up -d --build
+# Wait until backend-init completes (DB migrations)
+
+ollama pull gemma4:e2b
+
+# Terminal A — API
+cd backend
+python -m venv venv
+# Windows:  .\venv\Scripts\activate
+# macOS/Linux:  source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+# Terminal B — UI
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173** (Vite may use another port — check the terminal).  
+API docs: **http://127.0.0.1:8000/docs**
+
+---
+
+## Full setup guide
+
+### Step 1 — Clone and configure
+
+```bash
+git clone https://github.com/<your-username>/papervault.git
+cd papervault
+cp .env.example .env
+```
+
+Edit `.env` if you need different arXiv categories or DB credentials. Defaults match `docker-compose.yml`.
+
+### Step 2 — Build and start Docker services
+
+From the **repository root**:
+
+```bash
+docker compose up -d --build
+```
+
+This starts:
+
+| Service | Purpose |
+|---------|---------|
+| `postgres` | Relational DB (host port **5433**) |
+| `redis` | Celery broker |
+| `qdrant` | Vector store |
+| `backend-init` | Runs `init_db.py` + `alembic upgrade head` once |
+| `celery-worker` | Ingestion + ML pipeline |
+| `flower` | Celery monitoring |
+| `airflow-*` | Scheduler, web UI, workers |
+
+**Check that init succeeded:**
+
+```bash
+docker compose ps
+docker compose logs backend-init
+```
+
+You should see: `Backend Database is fully configured and ready!`
+
+<details>
+<summary><strong>Rebuild images from scratch</strong></summary>
+
+```bash
+docker compose down -v   # WARNING: deletes DB/Qdrant volumes
+docker compose build --no-cache
+docker compose up -d
+```
+
+</details>
+
+### Step 3 — Python environment (host API)
+
+The FastAPI app is **not** in Compose — run it on your machine so it can reach Ollama:
+
+```bash
+cd backend
+python -m venv venv
+```
+
+**Windows (PowerShell):**
+
+```powershell
+.\venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**macOS / Linux:**
+
+```bash
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Pre-trained classifiers ship in `backend/app/models/` (`*.pkl`). On first ingest, sentence-transformers and spaCy models download automatically inside the Celery container.
+
+### Step 4 — Ollama model
+
+```bash
+ollama pull gemma4:e2b
+ollama list
+```
+
+The RAG generator expects `gemma4:e2b` (see `backend/app/services/generator.py`). Change the model name there if you use a different tag.
+
+### Step 5 — Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Step 6 — (Optional) Run migrations on the host
+
+Usually handled by `backend-init`. If you develop against Postgres from the host:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+### Makefile shortcuts
+
+If you have `make` installed:
+
+```bash
+make dev      # docker compose up -d --build
+make ingest   # trigger arXiv fetch via Celery
+make api      # uvicorn on :8000
+make ui       # npm run dev
+make down     # stop stack
+```
+
+---
+
+## Verify the installation
+
+### 1. Health check
+
+```bash
+curl http://127.0.0.1:8000/
+# {"status":"PaperVault Backend is actively running."}
+```
+
+### 2. Load the corpus (ingestion)
+
+**Option A — Airflow UI**
+
+1. Open http://localhost:8081 (login: `admin` / `admin`)  
+2. Unpause DAG `daily_arxiv_ingestion`  
+3. Trigger DAG manually (play button)
+
+**Option B — Celery (recommended for first test)**
+
+```bash
+docker compose exec celery-worker celery -A app.services.celery_app call app.etl.tasks.fetch_daily_papers
+```
+
+Watch progress:
+
+```bash
+docker compose logs -f celery-worker
+```
+
+> **Note:** A full category sweep can take a long time and hit arXiv rate limits. For a quick test, temporarily set `ARXIV_MAX_RESULTS_PER_CATEGORY=5` in `.env`, restart `celery-worker`, then run the command again.
+
+### 3. Confirm data landed
+
+- **Qdrant:** http://localhost:6333/dashboard — collection `papers` should have points  
+- **Postgres:** `docker compose exec postgres psql -U papervault -d papervault -c "SELECT COUNT(*) FROM papers;"`
+
+### 4. Test RAG in the UI
+
+1. Ensure API (`:8000`) and UI (Vite) are running  
+2. Open the app, enter a question (e.g. *What are recent advances in transformer efficiency?*)  
+3. You should see an **Intelligence Brief** and **Sourced Literature** cards  
+
+**Direct API test:**
+
+```bash
+curl "http://127.0.0.1:8000/api/rag?q=transformer%20attention&limit=3"
+```
+
+### 5. Test ML classification
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/predict \
+  -H "Content-Type: application/json" \
+  -d "{\"abstract\": \"We propose a novel graph neural network for protein folding.\"}"
+```
+
+---
+
+## Service URLs
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| React UI | http://localhost:5173 | — |
+| FastAPI | http://127.0.0.1:8000 | — |
+| Swagger | http://127.0.0.1:8000/docs | — |
+| Airflow | http://localhost:8081 | `admin` / `admin` |
+| Flower | http://localhost:5555 | — |
+| Qdrant | http://localhost:6333/dashboard | — |
+| Postgres | `localhost:5433` | `papervault` / `papervault` |
+
+---
+
+## Screenshots & demos
+
+| | |
+|---|---|
+| **Dark theme** | ![Dark mode](demos/Frontend-Dark-Long.png) |
+| **Detail view** | ![Detail](demos/Frontend-Detailed.png) |
+| **Citations** | ![Sources](demos/Frontend-Dark-Close.png) |
+| **Light theme** | ![Light mode](demos/Frontend-Light.png) |
+| **Power BI** | ![BI report](demos/bi-report.gif) |
+| **System usage** | ![Usage](demos/System-Usage.png) |
+
+---
+
+## Power BI analytics
+
+The Postgres schema includes **analytics views** (created by Alembic migrations) for Power BI **DirectQuery**:
+
+- Executive KPIs (papers ingested, entities extracted)  
+- Domain distribution (ML-predicted categories)  
+- Top entities by domain (interactive slicers)
+
+Connect Power BI Desktop to:
+
+- **Server:** `localhost,5433`  
+- **Database:** `papervault`  
+- **User / password:** `papervault` / `papervault`
+
+Refresh the dataset after ingestion runs to see new papers.
+
+---
+
+## Project structure
+
+```text
+papervault/
+├── airflow/dags/              # Airflow DAG (triggers Celery)
+├── backend/
+│   ├── app/
+│   │   ├── config/            # Settings (.env)
+│   │   ├── db/                # SQLAlchemy models + Alembic
+│   │   ├── etl/               # arXiv client + Celery tasks
+│   │   ├── models/            # Serialized ML artifacts (*.pkl)
+│   │   ├── nlp/               # Embedder, NER, summarizer
+│   │   └── services/          # RAG, retriever, Celery app
+│   ├── Dockerfile.dev
+│   ├── pre_start.sh           # DB init (used by backend-init)
+│   └── requirements.txt
+├── frontend/                  # React + Vite SPA
+├── demos/                     # README screenshots & GIFs
+├── docker-compose.yml
+├── .env.example
+├── MAKEFILE                   # Convenience commands
+└── .github/workflows/         # CI
+```
+
+---
+
+## CI/CD
+
+On every push/PR to `main`, GitHub Actions:
+
+1. Installs Python 3.11 dependencies  
+2. Runs `flake8` on `backend/app/`  
+3. Validates `docker compose config` and builds images  
+
+See [`.github/workflows/main.yml`](.github/workflows/main.yml).
+
+---
+
+## Troubleshooting
+
+<details>
+<summary><strong>Docker: backend-init failed</strong></summary>
+
+```bash
+docker compose logs backend-init
+docker compose exec postgres pg_isready -U papervault
+```
+
+Re-run migrations:
+
+```bash
+cd backend && alembic upgrade head
+```
+
+</details>
+
+<details>
+<summary><strong>Celery worker exits / GPU error</strong></summary>
+
+If you do not have an NVIDIA GPU, remove the `deploy.resources` section under `celery-worker` in `docker-compose.yml`, then:
+
+```bash
+docker compose up -d --build celery-worker
+```
+
+</details>
+
+<details>
+<summary><strong>RAG returns empty sources</strong></summary>
+
+- Run ingestion first (see [Verify the installation](#verify-the-installation))  
+- Confirm Qdrant has vectors: http://localhost:6333/dashboard  
+- Ensure `QDRANT_URL` in `.env` is `http://127.0.0.1:6333` for the **host** API (not `http://qdrant:6333`)
+
+</details>
+
+<details>
+<summary><strong>Ollama connection errors</strong></summary>
+
+- `ollama serve` must be running  
+- `ollama pull gemma4:e2b`  
+- Test: `ollama run gemma4:e2b "hello"`
+
+</details>
+
+<details>
+<summary><strong>Frontend cannot reach API</strong></summary>
+
+The UI calls `http://127.0.0.1:8000` (see `frontend/src/App.tsx`). Start the API on that host/port or update the fetch URL for your environment.
+
+</details>
+
+<details>
+<summary><strong>arXiv 429 rate limits</strong></summary>
+
+Lower `ARXIV_MAX_RESULTS_PER_CATEGORY` in `.env`, wait 60s, and re-trigger ingestion. The client backs off automatically on HTTP 429.
+
+</details>
+
+---
+
+## Research & notebooks
+
+Offline experimentation (EDA, ensemble training, embedding benchmarks) lives under `notebooks/`:
+
+- `PreComputation.ipynb` — corpus exploration and model training  
+- `Benchmarks.ipynb` — embedding and retrieval benchmarks  
+
+Exported artifacts are committed under `backend/app/models/` for reproducible ingestion without retraining.
+
+---
+
+## License
+
+[MIT](LICENSE) — see `LICENSE` for details.
+
+---
+
+<p align="center">
+  <sub>Built by Anurag Pandey · arXiv → ML → Vectors → Grounded answers</sub>
+</p>

@@ -14,7 +14,7 @@ class PaperRetriever:
         self.settings = get_settings()
         self.qdrant = QdrantClient(url=self.settings.qdrant_url, api_key=self.settings.qdrant_api_key)
         self.embedder = Embedder()
-        self.similarity_threshold = 0.35 # Based on your Kaggle EDA findings
+        self.similarity_threshold = 0.05 # Based on your Kaggle EDA findings
 
     def search(self, query: str, limit: int = 5) -> list[dict]:
         # 1. Convert the user's question into a vector (Ensure Embedder uses 768-d MPNet!)

@@ -14,11 +14,11 @@ class GraphState(TypedDict):
 
 class RAGGenerator:
     def __init__(self):
-        logger.info("Initializing Ollama (Gemma 2B) and LangGraph...")
+        logger.info("Initializing Ollama (Gemma 4 E2B) and LangGraph...")
         
-        # Connect to your local Ollama instance using Gemma 2B
+        # Connect to your local Ollama instance using the new Gemma 4 E2B model
         self.llm = ChatOllama(
-            model="gemma:2b", 
+            model="gemma4:e2b", 
             temperature=0.2  # Low temperature for factual grounding
         )
         
@@ -40,25 +40,32 @@ class RAGGenerator:
         query = state["query"]
         context = state["context"]
         
-        # Strict RAG system prompt to enforce faithfulness to the retrieved text
+        # 1. Keep the System Message laser-focused on persona and rules
+        # Gemma 4 handles native system prompts beautifully
         system_instruction = (
             "You are PaperVault, an expert AI research assistant. "
-            "You MUST answer the user's question based ONLY on the provided context below. "
-            "If the answer is not contained in the context, explicitly state that you do not have enough information. "
-            "Structure your response beautifully using Markdown headings, bullet points, and deep analysis. "
-            "You MUST include inline markdown hyperlinks to the papers using the provided URLs.\n\n"
-            f"CONTEXT:\n{context}"
+            "You MUST answer the user's question based ONLY on the provided context. "
+            "If the answer is not in the context, explicitly state that you do not know. "
+            "CRITICAL: When referencing a paper, you MUST use inline markdown hyperlinks formatted exactly like this: [Paper Title](URL). "
+            "Do NOT list URLs at the end; embed them naturally within your analysis sentences."
+        )
+        
+        # 2. Wrap the heavy context and the query into the Human Message
+        human_prompt = (
+            f"Please answer the following question using the research context below.\n\n"
+            f"QUESTION: {query}\n\n"
+            f"AVAILABLE CONTEXT:\n{context}"
         )
         
         messages = [
             SystemMessage(content=system_instruction),
-            HumanMessage(content=query)
+            HumanMessage(content=human_prompt)
         ]
         
         # Trigger Ollama
+        logger.info("Generating response with RAG context...")
         response = self.llm.invoke(messages)
         
-        # Update the state with the generation
         return {"generation": response.content}
 
     def generate_answer(self, query: str, retrieved_papers: list) -> str:
@@ -80,7 +87,7 @@ class RAGGenerator:
         # Initialize the state and run the graph
         initial_state = {"query": query, "context": context_str}
         
-        logger.info("Triggering LangGraph generation node with Gemma 2B...")
+        logger.info("Triggering LangGraph generation node with Gemma 4 E2B...")
         result = self.app.invoke(initial_state)
         
         return result["generation"]

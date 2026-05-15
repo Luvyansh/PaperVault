@@ -15,9 +15,12 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# --- HARDCODED DIAGNOSTIC URL ---
-# We are completely ignoring Pydantic settings to bypass the 5432 caching bug
-FORCE_URL = "postgresql://papervault:papervault@127.0.0.1:5433/papervault"
+# --- DYNAMIC URL FETCH ---
+# Grab the URL from Docker environment, fallback to host port for local testing
+FORCE_URL = os.environ.get(
+    "DATABASE_URL", 
+    "postgresql://papervault:papervault@127.0.0.1:5433/papervault"
+)
 
 def include_object(object, name, type_, reflected, compare_to):
     # Ignore Airflow's tables - only process tables defined in our models.py

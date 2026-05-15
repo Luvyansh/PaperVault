@@ -56,18 +56,27 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
 
+  backend-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: ./pre_start.sh
+    environment:
+      DATABASE_URL: postgresql://papervault:papervault@postgres:5432/papervault
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-    # 1. CHANGED --concurrency=1 to --pool=solo
     command: celery -A app.services.celery_app worker -Q celery,ingestion,analytics --loglevel=info --pool=solo
     environment:
       DATABASE_URL: postgresql://papervault:papervault@postgres:5432/papervault
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: papers
-      # 2. ADDED THIS LINE to prevent PyTorch from greedily grabbing CPU threads
       OMP_NUM_THREADS: "1" 
     env_file: .env
     volumes:
@@ -79,6 +88,9 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      # ADDED: Prevents Celery from starting until the DB is fully migrated
+      backend-init:
+        condition: service_completed_successfully
     deploy:
       resources:
         reservations:
@@ -107,22 +119,39 @@ services:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
       retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-worker:
     <<: *airflow-common
     command: celery worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-init:
     <<: *airflow-common
-    command: >
-      bash -c "airflow db migrate &&
-               airflow users create --username admin --password admin
-               --firstname Admin --lastname User
-               --role Admin --email admin@papervault.ai"
+    command: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@papervault.ai"
 
 volumes:
   postgres-data:

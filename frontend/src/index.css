@@ -1,214 +1,91 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+/* Theme color variables (Tailwind 3 cannot use @plugin "daisyui/theme") */
+@import "daisyui/theme/forest.css";
+@import "daisyui/theme/fantasy.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Custom Loader from Uiverse.io */
-.loader {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    --color: oklch(36.674% 0.051 338.825);
-    --animation: 2s ease-in-out infinite;
+/* ─── Shadcn / animate-ui Bridge ─────────────────────────────────────────── */
+/*
+  animate-ui's LiquidButton and other Shadcn-based components read these
+  CSS variables. We map them to the active DaisyUI theme's color values so
+  both libraries stay in sync automatically on theme switch.
+*/
+/* Ensure explicit data-theme always overrides OS preference */
+[data-theme="forest"] {
+    color-scheme: dark;
 }
 
-.loader .circle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    width: 20px;
-    height: 20px;
-    border: solid 2px var(--color);
-    border-radius: 50%;
-    margin: 0 10px;
-    background-color: transparent;
-    animation: circle-keys var(--animation);
+[data-theme="fantasy"] {
+    color-scheme: light;
 }
 
-.loader .circle .dot {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background-color: var(--color);
-    animation: dot-keys var(--animation);
+[data-theme] {
+    --background: var(--color-base-100);
+    --foreground: var(--color-base-content);
+    --card: var(--color-base-200);
+    --card-foreground: var(--color-base-content);
+    --popover: var(--color-base-200);
+    --popover-foreground: var(--color-base-content);
+    --primary: var(--color-primary);
+    --primary-foreground: var(--color-primary-content);
+    --secondary: var(--color-secondary);
+    --secondary-foreground: var(--color-secondary-content);
+    --muted: var(--color-base-300);
+    --muted-foreground: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+    --accent: var(--color-accent);
+    --accent-foreground: var(--color-accent-content);
+    --destructive: var(--color-error);
+    --destructive-foreground: var(--color-error-content);
+    --border: var(--color-base-300);
+    --input: var(--color-base-300);
+    --ring: var(--color-primary);
+    --radius: 0.75rem;
 }
 
-.loader .circle .outline {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    animation: outline-keys var(--animation);
-}
-
-.circle:nth-child(2) {
-    animation-delay: 0.3s;
-}
-
-.circle:nth-child(3) {
-    animation-delay: 0.6s;
-}
-
-.circle:nth-child(4) {
-    animation-delay: 0.9s;
-}
-
-.circle:nth-child(5) {
-    animation-delay: 1.2s;
-}
-
-.circle:nth-child(2) .dot {
-    animation-delay: 0.3s;
-}
-
-.circle:nth-child(3) .dot {
-    animation-delay: 0.6s;
-}
-
-.circle:nth-child(4) .dot {
-    animation-delay: 0.9s;
-}
-
-.circle:nth-child(5) .dot {
-    animation-delay: 1.2s;
-}
-
-.circle:nth-child(1) .outline {
-    animation-delay: 0.9s;
-}
-
-.circle:nth-child(2) .outline {
-    animation-delay: 1.2s;
-}
-
-.circle:nth-child(3) .outline {
-    animation-delay: 1.5s;
-}
-
-.circle:nth-child(4) .outline {
-    animation-delay: 1.8s;
-}
-
-.circle:nth-child(5) .outline {
-    animation-delay: 2.1s;
-}
-
-@keyframes circle-keys {
-    0% {
-        transform: scale(1);
-        opacity: 1;
-    }
-
-    50% {
-        transform: scale(1.5);
-        opacity: 0.5;
-    }
-
-    100% {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-@keyframes dot-keys {
-    0% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(0);
-    }
-
-    100% {
-        transform: scale(1);
-    }
-}
-
-@keyframes outline-keys {
-    0% {
-        transform: scale(0);
-        outline: solid 20px var(--color);
-        outline-offset: 0;
-        opacity: 1;
-    }
-
-    100% {
-        transform: scale(1);
-        outline: solid 0 transparent;
-        outline-offset: 20px;
-        opacity: 0;
-    }
-}
-
+/* ─── Base Layer ──────────────────────────────────────────────────────────── */
 @layer base {
-    .theme {
-        --font-heading: var(--font-sans);
-        --font-sans: 'Inter Variable', sans-serif;
-    }
-
-    /* Forcing Shadcn to use the DaisyUI Luxury Theme OKLCH values */
-    :root,
-    .dark {
-        --background: oklch(14.076% 0.004 285.822);
-        --foreground: oklch(75.687% 0.123 76.89);
-
-        --card: oklch(20.219% 0.004 308.229);
-        --card-foreground: oklch(75.687% 0.123 76.89);
-
-        --popover: oklch(20.219% 0.004 308.229);
-        --popover-foreground: oklch(75.687% 0.123 76.89);
-
-        --primary: oklch(0.202 0.000 0.0);
-        --primary-foreground: oklch(1.000 0.000 0.0);
-
-        --secondary: oklch(27.581% 0.064 261.069);
-        --secondary-foreground: oklch(85.516% 0.012 261.069);
-
-        --muted: oklch(23.219% 0.004 308.229);
-        --muted-foreground: oklch(75.687% 0.123 76.89 / 0.6);
-
-        --accent: oklch(36.674% 0.051 338.825);
-        --accent-foreground: oklch(87.334% 0.01 338.825);
-
-        --destructive: oklch(71.753% 0.176 22.568);
-        --destructive-foreground: oklch(14.35% 0.035 22.568);
-
-        --border: oklch(23.219% 0.004 308.229);
-        --input: oklch(23.219% 0.004 308.229);
-        --ring: oklch(36.674% 0.051 338.825);
-
-        --chart-1: oklch(36.674% 0.051 338.825);
-        --chart-2: oklch(27.581% 0.064 261.069);
-        --chart-3: oklch(79.061% 0.121 237.133);
-        --chart-4: oklch(78.119% 0.192 132.154);
-        --chart-5: oklch(86.127% 0.136 102.891);
-        --radius: 0.625rem;
-
-        --sidebar: oklch(20.219% 0.004 308.229);
-        --sidebar-foreground: oklch(75.687% 0.123 76.89);
-        --sidebar-primary: oklch(0.202 0.000 0.0);
-        --sidebar-primary-foreground: oklch(1.000 0.000 0.0);
-        --sidebar-accent: oklch(36.674% 0.051 338.825);
-        --sidebar-accent-foreground: oklch(87.334% 0.01 338.825);
-        --sidebar-border: oklch(23.219% 0.004 308.229);
-        --sidebar-ring: oklch(36.674% 0.051 338.825);
-    }
-
-    * {
-        @apply border-border;
-    }
-
-    body {
-        /* Left empty so DaisyUI bg-base-100 applies cleanly */
-    }
-
     html {
         @apply font-sans;
     }
+
+    * {
+        @apply border-base-300;
+    }
+
+    ::selection {
+        background-color: var(--color-primary);
+        color: var(--color-primary-content);
+    }
+}
+
+/* ─── Custom Scrollbar ────────────────────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-base-300);
+    border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-neutral);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+html[data-magicui-theme-vt="active"]::view-transition-new(root) {
+    clip-path: var(--magicui-theme-vt-clip-from);
 }

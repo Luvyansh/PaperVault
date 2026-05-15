@@ -1,43 +1,108 @@
-name: PaperVault CI/CD
+name: PaperVault CI
 
 on:
-    push:
-        branches: [ "main" ]
-    pull_request:
-        branches: [ "main" ]
-        workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-    integration-test:
-        runs-on: ubuntu-latest
+  backend:
+    name: Backend (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
 
-        steps:
-            - name: Checkout Repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-            - name: Set up Python 3.11
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
 
-            - name: Install Backend Dependencies
-              working-directory: ./backend
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-            - name: Check Code Formatting (Ruff / Flake8)
-              working-directory: ./backend
-              run: |
-                  # This proves you care about clean, standardized code
-                  pip install flake8
-                  flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Lint (flake8 — syntax & fatal errors)
+        run: >
+          flake8 app/
+          --count
+          --select=E9,F63,F7,F82
+          --show-source
+          --statistics
 
-            - name: Validate Docker Infrastructure
-              # This proves your infrastructure as code is stable
-              run: |
-                  # Dynamically create the .env file from the example template for the runner
-                  cp .env.example .env
-                  docker compose config
-                  docker compose build
+      - name: Byte-compile application package
+        run: python -m compileall -q app
+
+      - name: Validate Airflow DAG syntax
+        working-directory: .
+        run: python -m py_compile airflow/dags/arxiv_ingestion_dag.py
+
+      - name: Verify ML artifacts are present
+        run: |
+          test -f app/models/stacking_ensemble.pkl
+          test -f app/models/tfidf_vectorizer.pkl
+          test -f app/models/label_encoder.pkl
+
+  frontend:
+    name: Frontend (React)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        # Vite build only — avoids tsc -b strictness on CI until TS 6 migration is done
+        run: npx vite build
+
+  docker:
+    name: Docker (Compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create environment file
+        run: cp .env.example .env
+
+      - name: Validate Compose file
+        run: docker compose config --quiet
+
+      - name: Build images
+        run: docker compose build

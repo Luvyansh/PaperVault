@@ -1,6 +1,16 @@
+.PHONY: dev down logs build api ui ingest migrate
+
+# Start infrastructure (Postgres, Redis, Qdrant, Airflow, Celery, Flower)
 dev:
-	docker compose up -d
-	@echo "Stack running. Airflow UI: http://localhost:8080"
+	docker compose up -d --build
+	@echo ""
+	@echo "Stack is up."
+	@echo "  Airflow UI : http://localhost:8081  (admin / admin)"
+	@echo "  Flower     : http://localhost:5555"
+	@echo "  Qdrant     : http://localhost:6333/dashboard"
+	@echo "  Postgres   : localhost:5433"
+	@echo ""
+	@echo "Next: run 'make api' and 'make ui' in separate terminals."
 
 down:
 	docker compose down
@@ -8,11 +18,24 @@ down:
 logs:
 	docker compose logs -f
 
+build:
+	docker compose build
+
+# Run DB migrations on the host (optional if backend-init already ran)
+migrate:
+	cd backend && alembic upgrade head
+
+# Queue a full arXiv fetch + ingest via Celery
+ingest:
+	docker compose exec celery-worker celery -A app.services.celery_app call app.etl.tasks.fetch_daily_papers
+
+# FastAPI (host) — requires Docker stack + Ollama
+api:
+	cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# React dev server (host)
+ui:
+	cd frontend && npm run dev
+
 test:
 	cd backend && python -m pytest tests/ -v
-
-ingest:
-	docker compose exec celery-worker python -m app.etl.ingest
-
-shell:
-	cd backend && python
