@@ -14,9 +14,11 @@
 | **Stack** | Python 3.11 · FastAPI · Celery · Airflow · PostgreSQL · Qdrant · React · Ollama |
 | **Design goal** | End-to-end ML/RAG on modest hardware (~4GB VRAM for the LLM) |
 
-<p align="center">
-  <video src="demos/PaperVault-demo.mp4" width="900" controls></video>
-</p>
+
+
+https://github.com/user-attachments/assets/ea914d8e-4ec8-4ccd-a8b0-35207fd78d05
+
+
 
 ---
 
