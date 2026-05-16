@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { Search, FileText, ExternalLink, User, Calendar, X, BookOpen, Layers, Zap } from 'lucide-react';
@@ -7,8 +7,18 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
-import { LiquidButton } from '@/components/animate-ui/components/buttons/liquid';
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler';
+import { InteractiveHoverButton } from '@/components/ui/interactive-hover-button';
+import { NeonGradientCard } from '@/components/ui/neon-gradient-card';
+import { SplashIntro } from '@/components/splash-intro';
+
+function shouldShowSplash(): boolean {
+  try {
+    return sessionStorage.getItem('papervault-splash-seen') !== '1';
+  } catch {
+    return true;
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,132 +37,34 @@ interface Source {
 interface RAGResponse {
   query: string;
   answer: string;
+  thinking?: string | null;
   sources: Source[];
 }
 
+const THINKING_PREF_KEY = 'papervault-show-thinking';
+
 // ─── Synthesis Loader ─────────────────────────────────────────────────────────
 
-const LOADER_STEPS = [
-  'Scanning arXiv corpus...',
-  'Ranking by semantic relevance...',
-  'Synthesizing intelligence brief...',
-];
-
-const SynthesisLoader = () => {
-  const [stepIdx, setStepIdx] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setStepIdx((s) => (s + 1) % LOADER_STEPS.length), 1800);
-    return () => clearInterval(timer);
-  }, []);
-
-  const nodes = Array.from({ length: 6 }, (_, i) => ({
-    angle: (i * 60 * Math.PI) / 180,
-    delay: i * 0.22,
-  }));
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="flex flex-col items-center gap-10 py-20"
-    >
-      {/* Animated knowledge-graph */}
-      <div className="relative w-44 h-44">
-        {/* Outer rotating ring */}
-        <motion.div
-          className="absolute inset-0 rounded-full border-2 border-transparent"
-          style={{
-            borderTopColor: 'var(--color-primary)',
-            borderRightColor: 'var(--color-primary)',
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+const SynthesisLoader = () => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="flex flex-col items-center gap-4 py-16"
+  >
+    <motion.div className="flex items-center gap-2">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="h-2 w-2 rounded-full bg-primary"
+          animate={{ opacity: [0.25, 1, 0.25], scale: [0.85, 1, 0.85] }}
+          transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
         />
-        {/* Inner counter-rotating ring */}
-        <motion.div
-          className="absolute inset-5 rounded-full border-2 border-transparent"
-          style={{
-            borderBottomColor: 'var(--color-accent)',
-            borderLeftColor: 'var(--color-accent)',
-          }}
-          animate={{ rotate: -360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-        />
-
-        {/* SVG connection lines */}
-        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 176 176">
-          {nodes.map((node, i) => (
-            <motion.line
-              key={i}
-              x1="88"
-              y1="88"
-              x2={88 + Math.cos(node.angle) * 60}
-              y2={88 + Math.sin(node.angle) * 60}
-              strokeWidth="1"
-              strokeDasharray="4 4"
-              style={{ stroke: 'var(--color-primary)' }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0, 0.45, 0.45, 0] }}
-              transition={{
-                duration: 2.4,
-                delay: node.delay,
-                repeat: Infinity,
-                repeatDelay: 0.4,
-                ease: 'easeInOut',
-              }}
-            />
-          ))}
-        </svg>
-
-        {/* Satellite nodes */}
-        {nodes.map((node, i) => (
-          <motion.div
-            key={i}
-            className="absolute w-3 h-3 rounded-full bg-secondary"
-            style={{ top: '50%', left: '50%', marginTop: -6, marginLeft: -6 }}
-            initial={{ opacity: 0, x: 0, y: 0 }}
-            animate={{
-              opacity: [0, 1, 1, 0],
-              x: Math.cos(node.angle) * 60,
-              y: Math.sin(node.angle) * 60,
-              scale: [0.4, 1, 1, 0.4],
-            }}
-            transition={{
-              duration: 2.4,
-              delay: node.delay,
-              repeat: Infinity,
-              repeatDelay: 0.4,
-              ease: 'easeInOut',
-            }}
-          />
-        ))}
-
-        {/* Pulsing center dot */}
-        <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-primary"
-          animate={{ scale: [1, 1.3, 1], opacity: [0.55, 1, 0.55] }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      </div>
-
-      {/* Cycling status text */}
-      <AnimatePresence mode="wait">
-        <motion.p
-          key={stepIdx}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.3 }}
-          className="text-sm font-mono tracking-widest text-base-content/40 uppercase"
-        >
-          {LOADER_STEPS[stepIdx]}
-        </motion.p>
-      </AnimatePresence>
+      ))}
     </motion.div>
-  );
-};
+    <p className="text-sm text-base-content/45 font-mono tracking-wide">Synthesizing…</p>
+  </motion.div>
+);
 
 // ─── Landing Hero ─────────────────────────────────────────────────────────────
 
@@ -192,7 +104,6 @@ const LandingHero = ({
     exit={{ opacity: 0, y: -20 }}
     className="flex flex-col items-center justify-center gap-12 min-h-[82vh] pt-6 pb-20"
   >
-    {/* Badge */}
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -204,7 +115,6 @@ const LandingHero = ({
       </span>
     </motion.div>
 
-    {/* Title */}
     <motion.div
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -219,39 +129,36 @@ const LandingHero = ({
       </p>
     </motion.div>
 
-    {/* Search bar */}
     <motion.form
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
       onSubmit={onSearch}
-      className="relative group w-full max-w-2xl"
+      className="flex w-full max-w-2xl flex-col gap-3 sm:flex-row sm:items-stretch"
     >
-      <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-base-content/30 group-focus-within:text-primary transition-colors duration-200">
-        <Search size={22} />
+      <div className="relative group flex-1">
+        <motion.div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-base-content/30 group-focus-within:text-primary transition-colors duration-200">
+          <Search size={22} />
+        </motion.div>
+        <input
+          type="text"
+          placeholder="E.g., What are the scaling laws for self-attention?"
+          className="input w-full pl-14 py-5 h-auto text-base rounded-2xl bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-primary shadow-xl transition-colors"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          disabled={loading}
+          autoFocus
+        />
       </div>
-      <input
-        type="text"
-        placeholder="E.g., What are the scaling laws for self-attention?"
-        className="input w-full pl-14 pr-44 py-5 h-auto text-base rounded-2xl bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-primary shadow-xl transition-colors"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        disabled={loading}
-        autoFocus
-      />
-      <div className="absolute right-2 top-2 bottom-2 flex items-stretch">
-        <LiquidButton
-          type="submit"
-          variant="default"
-          className="h-full px-6 rounded-xl font-bold text-sm"
-          disabled={loading || !query.trim()}
-        >
-          {loading ? 'Searching...' : 'Synthesize'}
-        </LiquidButton>
-      </div>
+      <InteractiveHoverButton
+        type="submit"
+        disabled={loading || !query.trim()}
+        className="shrink-0 rounded-2xl border-base-300 px-8 py-4 text-sm disabled:opacity-50 disabled:pointer-events-none sm:self-stretch"
+      >
+        {loading ? 'Searching...' : 'Synthesize'}
+      </InteractiveHoverButton>
     </motion.form>
 
-    {/* Feature cards */}
     <motion.div
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
@@ -264,11 +171,20 @@ const LandingHero = ({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.38 + i * 0.07 }}
-          className="bg-base-200 rounded-2xl p-5 border border-base-300 hover:border-primary/50 transition-colors duration-200 cursor-default"
+          className="cursor-default"
         >
-          <Icon className="text-primary mb-3" size={20} />
-          <h3 className="font-semibold text-sm text-base-content mb-1">{title}</h3>
-          <p className="text-xs text-base-content/45 leading-relaxed">{desc}</p>
+          <NeonGradientCard
+            borderSize={2}
+            borderRadius={16}
+            neonColors={{
+              firstColor: 'var(--color-primary)',
+              secondColor: 'var(--color-secondary)',
+            }}
+          >
+            <Icon className="text-primary mb-3" size={20} />
+            <h3 className="font-semibold text-sm text-base-content mb-1">{title}</h3>
+            <p className="text-xs text-base-content/45 leading-relaxed">{desc}</p>
+          </NeonGradientCard>
         </motion.div>
       ))}
     </motion.div>
@@ -284,6 +200,24 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPaper, setSelectedPaper] = useState<Source | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [splashDone, setSplashDone] = useState(() => !shouldShowSplash());
+  const [showThinking, setShowThinking] = useState(() => {
+    try {
+      return localStorage.getItem(THINKING_PREF_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
+
+  const handleThinkingToggle = (enabled: boolean) => {
+    setShowThinking(enabled);
+    try {
+      localStorage.setItem(THINKING_PREF_KEY, enabled ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -294,12 +228,16 @@ export default function App() {
     setResult(null);
 
     try {
-      const res = await fetch(
-        `http://127.0.0.1:8000/api/rag?q=${encodeURIComponent(query)}&limit=5`
-      );
+      const params = new URLSearchParams({
+        q: query,
+        limit: '5',
+        think: showThinking ? 'true' : 'false',
+      });
+      const res = await fetch(`http://127.0.0.1:8000/api/rag?${params}`);
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data: RAGResponse = await res.json();
       setResult(data);
+      if (data.thinking) setThinkingExpanded(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred.');
     } finally {
@@ -316,9 +254,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-base-100 text-base-content font-sans">
-      <div className="max-w-5xl mx-auto px-4 md:px-8">
+      <AnimatePresence>
+        {!splashDone && <SplashIntro key="splash" onComplete={() => setSplashDone(true)} />}
+      </AnimatePresence>
 
-        {/* ── Navbar ─────────────────────────────────────────────────── */}
+      <motion.div
+        className="max-w-5xl mx-auto px-4 md:px-8"
+        initial={{ opacity: 0, y: 10 }}
+        animate={splashDone ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      >
         <header className="flex items-center justify-between py-5">
           <button
             onClick={resetToLanding}
@@ -335,7 +280,6 @@ export default function App() {
           />
         </header>
 
-        {/* ── Page content ────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
           {!hasSearched ? (
             <LandingHero
@@ -352,32 +296,32 @@ export default function App() {
               exit={{ opacity: 0 }}
               className="space-y-8 pb-20"
             >
-              {/* Compact search bar */}
-              <form onSubmit={handleSearch} className="relative group w-full max-w-3xl">
-                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-base-content/30 group-focus-within:text-primary transition-colors duration-200">
-                  <Search size={20} />
+              <form
+                onSubmit={handleSearch}
+                className="flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-center"
+              >
+                <div className="relative group flex-1">
+                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-base-content/30 group-focus-within:text-primary transition-colors duration-200">
+                    <Search size={20} />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ask another research question..."
+                    className="input w-full pl-12 h-14 rounded-xl bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-primary transition-colors"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    disabled={loading}
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Ask another research question..."
-                  className="input w-full pl-12 pr-40 h-14 rounded-xl bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-primary transition-colors"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  disabled={loading}
-                />
-                <div className="absolute right-2 top-2 bottom-2 flex items-stretch">
-                  <LiquidButton
-                    type="submit"
-                    variant="default"
-                    className="h-full px-5 rounded-lg font-bold text-sm"
-                    disabled={loading || !query.trim()}
-                  >
-                    {loading ? 'Searching...' : 'Synthesize'}
-                  </LiquidButton>
-                </div>
+                <InteractiveHoverButton
+                  type="submit"
+                  disabled={loading || !query.trim()}
+                  className="shrink-0 rounded-xl border-base-300 px-6 py-3 text-sm disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {loading ? 'Searching...' : 'Synthesize'}
+                </InteractiveHoverButton>
               </form>
 
-              {/* Error state */}
               {error && (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -388,36 +332,74 @@ export default function App() {
                 </motion.div>
               )}
 
-              {/* Synthesis Loader */}
               <AnimatePresence>{loading && <SynthesisLoader />}</AnimatePresence>
 
-              {/* Results grid */}
               {result && !loading && (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="grid grid-cols-1 lg:grid-cols-3 gap-8"
                 >
-                  {/* ── Intelligence Brief ─────────────────────────── */}
                   <div className="lg:col-span-2 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <FileText className="text-primary" size={18} />
-                      <h2 className="text-xl font-bold text-base-content">Intelligence Brief</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <FileText className="text-primary" size={18} />
+                        <h2 className="text-xl font-bold text-base-content">Intelligence Brief</h2>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-base-content/60">
+                        <input
+                          type="checkbox"
+                          className="toggle toggle-sm toggle-primary"
+                          checked={showThinking}
+                          onChange={(e) => handleThinkingToggle(e.target.checked)}
+                        />
+                        Show reasoning
+                      </label>
                     </div>
+
+                    {showThinking && result.thinking && (
+                      <div className="rounded-2xl border border-base-300 bg-base-300/20 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setThinkingExpanded((v) => !v)}
+                          className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-base-content/70 hover:bg-base-300/30 transition-colors"
+                        >
+                          <span>Model reasoning</span>
+                          <span className="text-xs font-mono opacity-50">
+                            {thinkingExpanded ? 'Hide' : 'Show'}
+                          </span>
+                        </button>
+                        {thinkingExpanded && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="px-4 pb-4 prose prose-sm max-w-none text-base-content/55 border-t border-base-300/50"
+                          >
+                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                              {result.thinking}
+                            </ReactMarkdown>
+                          </motion.div>
+                        )}
+                      </div>
+                    )}
+
+                    {showThinking && !result.thinking && (
+                      <p className="text-xs text-base-content/40 font-mono">
+                        No reasoning trace returned. Your Ollama build must support think=true for this
+                        model (e.g. gemma4:4b-thinking).
+                      </p>
+                    )}
+
                     <div className="rounded-2xl bg-base-200 border border-base-300 shadow-xl">
                       <div className="p-6 prose prose-sm max-w-none text-base-content prose-headings:text-base-content prose-a:text-primary prose-strong:text-base-content prose-code:text-secondary">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                        >
+                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                           {result.answer}
                         </ReactMarkdown>
                       </div>
                     </div>
                   </div>
 
-                  {/* ── Citations Sidebar ───────────────────────────── */}
-                  <div className="space-y-4">
+                  <motion.div className="space-y-4">
                     <h3 className="text-lg font-bold text-base-content">Sourced Literature</h3>
                     <div className="flex flex-col gap-3">
                       {result.sources.map((source) => (
@@ -449,19 +431,17 @@ export default function App() {
                         </motion.div>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
                 </motion.div>
               )}
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
-      {/* ── Paper Detail Modal ───────────────────────────────────────── */}
       <AnimatePresence>
         {selectedPaper && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
+          <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -470,12 +450,10 @@ export default function App() {
               className="absolute inset-0 bg-base-100/80 backdrop-blur-sm"
             />
 
-            {/* Modal */}
             <motion.div
               layoutId={`paper-card-${selectedPaper.db_id}`}
               className="relative w-full max-w-2xl bg-base-200 rounded-3xl shadow-2xl border border-base-300 overflow-hidden flex flex-col max-h-[88vh] z-10"
             >
-              {/* Header */}
               <div className="p-6 border-b border-base-300 bg-base-300/30 flex justify-between items-start">
                 <div className="space-y-3 pr-10">
                   <div className="flex gap-2 flex-wrap">
@@ -503,7 +481,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Abstract body */}
               <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
                 <h4 className="text-sm font-semibold text-base-content mb-3 uppercase tracking-wider opacity-60">
                   Abstract
@@ -515,12 +492,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="p-4 border-t border-base-300 bg-base-300/30 flex justify-end gap-3">
-                <button
-                  onClick={() => setSelectedPaper(null)}
-                  className="btn btn-ghost btn-sm"
-                >
+                <button onClick={() => setSelectedPaper(null)} className="btn btn-ghost btn-sm">
                   Close
                 </button>
                 <a
@@ -533,7 +506,7 @@ export default function App() {
                 </a>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

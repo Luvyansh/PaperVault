@@ -1,0 +1,16 @@
+feat: overhaul DevOps automation, upgrade LLM, and add LaTeX UI rendering
+
+Infrastructure & DevOps:
+- Replaced manual setup scripts with a fully automated `pre_start.sh` container initialization sequence.
+- Refactored `init_db.py` from a redundant schema creator into a robust PostgreSQL readiness checker.
+- Resolved database race conditions in `docker-compose.yml` by enforcing `service_completed_successfully` dependencies for Celery workers and Airflow nodes.
+- Fixed bash string parsing errors in the Airflow initialization service.
+
+Backend & ETL:
+- Upgraded LangGraph RAG orchestrator to DeepMind's `gemma4:e2b` for superior reasoning and context handling.
+- Fixed the disappearing citation UI regression by moving heavy vector context out of the SystemMessage and into the HumanMessage, eliminating LLM attention drift.
+- Engineered polite pagination and strict 429 rate-limit handling in `arxiv_client.py` to securely extract bulk datasets.
+
+Frontend:
+- Installed `remark-math` and `rehype-katex`.
+- Upgraded the React Markdown parser in `App.tsx` to natively render complex mathematical equations and arXiv LaTeX syntax inside the Intelligence Brief and Paper Modals.

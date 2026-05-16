@@ -52,19 +52,24 @@ def health_check():
 
 @app.get("/api/rag")
 def ask_papervault(
-    q: str = Query(..., description="The natural language question to ask"), 
-    limit: int = Query(3, description="Number of papers to retrieve for context")
+    q: str = Query(..., description="The natural language question to ask"),
+    limit: int = Query(3, description="Number of papers to retrieve for context"),
+    think: bool = Query(
+        False,
+        description="Enable model reasoning trace (Ollama think=true; requires a thinking-capable model)",
+    ),
 ):
     """Executes the full Retrieval-Augmented Generation pipeline."""
-    logger.info(f"RAG Request received: '{q}'")
-    
+    logger.info(f"RAG Request received: '{q}' (think={think})")
+
     retrieved_papers = retriever.search(query=q, limit=limit)
-    answer = generator.generate_answer(query=q, retrieved_papers=retrieved_papers)
-    
+    result = generator.generate_answer(query=q, retrieved_papers=retrieved_papers, think=think)
+
     return {
         "query": q,
-        "answer": answer,
-        "sources": retrieved_papers
+        "answer": result["answer"],
+        "thinking": result.get("thinking") or None,
+        "sources": retrieved_papers,
     }
 
 # --- NEW: Machine Learning Classification Endpoint ---

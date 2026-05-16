@@ -8,9 +8,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Shadcn / animate-ui Bridge ─────────────────────────────────────────── */
+/* ─── Shadcn / UI bridge ─────────────────────────────────────────────────── */
 /*
-  animate-ui's LiquidButton and other Shadcn-based components read these
+  Shadcn-based UI components read these
   CSS variables. We map them to the active DaisyUI theme's color values so
   both libraries stay in sync automatically on theme switch.
 */
@@ -60,6 +60,9 @@
         background-color: var(--color-primary);
         color: var(--color-primary-content);
     }
+  .theme {
+        --animate-background-position-spin: background-position-spin 3000ms infinite alternate;
+    }
 }
 
 /* ─── Custom Scrollbar ────────────────────────────────────────────────────── */
@@ -88,4 +91,15 @@
 
 html[data-magicui-theme-vt="active"]::view-transition-new(root) {
     clip-path: var(--magicui-theme-vt-clip-from);
+}
+
+@theme inline {
+  @keyframes background-position-spin {
+  0% {
+    background-position: top center;
+        }
+  100% {
+    background-position: bottom center;
+        }
+    }
 }

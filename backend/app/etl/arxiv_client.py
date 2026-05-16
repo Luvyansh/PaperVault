@@ -20,7 +20,7 @@ class ArxivClient:
     def fetch_papers(self) -> list[dict]:
         """Iterates through configured categories and fetches papers in safe chunks."""
         all_papers = []
-        CHUNK_SIZE = 50  # Safe limit to avoid 429s
+        CHUNK_SIZE = 20  # Safe limit to avoid 429s
 
         for category in self.settings.category_list:
             total_target = self.settings.arxiv_max_results_per_category
