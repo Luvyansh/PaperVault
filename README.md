@@ -15,7 +15,7 @@
 | **Design goal** | End-to-end ML/RAG on modest hardware (~4GB VRAM for the LLM) |
 
 <p align="center">
-  <img src="demos/Frontend-Dark-Long.png" alt="PaperVault dark theme — search and synthesis view" width="900" />
+  <video src="demos/PaperVault-demo.mp4" width="900" controls></video>
 </p>
 
 ---
